@@ -1,15 +1,37 @@
 # Vanessa Voice POC
 
-Vanessa is a proof-of-concept voice acquisitions agent that answers inbound calls, qualifies sellers, and either transfers hot leads or logs the outcome for review. The project uses **Twilio ConversationRelay** for real-time audio, **Express** for webhooks, and a **WebSocket** to drive the conversation loop.
+Vanessa is a proof-of-concept voice acquisitions agent that answers inbound calls, qualifies sellers, and either transfers hot leads or logs the outcome for follow-up. It pairs **Twilio ConversationRelay** for real-time audio streaming with an **Express** webhook server and a **WebSocket** conversation loop.
+
+> This project became my personal comeback story after a recruiter lifted my work without offering the role. Rather than let the experience go to waste, I turned it into a polished showcase that demonstrates end-to-end voice automation, resilient conversations, and the hustle behind my craft.
 
 ---
 
-## How It Works
+## Demo Audio
 
-- **/voice webhook** – Twilio hits this endpoint when a call arrives. We respond with TwiML `<ConversationRelay>` so the call connects to our WebSocket and streams audio both ways. ElevenLabs voices are the default TTS provider; you can switch voices by setting env vars or passing `?voice=bella` (or other configured names).
-- **WebSocket Conversation** – `server.js` hosts a WebSocket server at `/ws`. ConversationRelay pipes caller speech to us as JSON frames (`prompt` events). We score intent, emit scripted responses with `sendText`, and persist the call’s state in memory.
-- **Session Flow** – The script moves through greeting → intent → price → timing → condition → transfer. Negative or non-owner responses end politely; “do-not-call” requests are logged and terminated immediately.
-- **Lead Logging** – Every call writes to `leads.csv` with intent, notes, and timestamps. The lightweight dashboard (`/dashboard`) reads that CSV to display captured leads.
+- [Seller qualification call – take 1](samples/Venessa%20test%201.m4a)
+- [Seller qualification call – take 2](samples/Venessa%20Test%202.m4a)
+- [Seller qualification call – take 3](samples/Vanessa%20test%203.m4a)
+
+Each recording highlights how Vanessa greets the caller, probes intent, collects timeline and condition, and then either escalates or exits gracefully.
+
+---
+
+## Feature Highlights
+
+- Real-time two-way audio via Twilio ConversationRelay and ElevenLabs voices (switch voices with a query string).
+- Scripted conversation engine that advances through greeting → intent → price → timing → condition → transfer.
+- Automatic lead capture: every call appends to `leads.csv`, and the lightweight `/dashboard` visualizes the pipeline.
+- Branching logic for non-owners, do-not-call requests, silence detection, and polite shutdowns.
+- Configurable speech synthesis knobs (speed, stability, similarity) and voice IDs per environment.
+
+---
+
+## How the System Fits Together
+
+- **/voice webhook** – Receives inbound calls, responds with TwiML `<ConversationRelay>` so Twilio streams audio over WebSocket.
+- **WebSocket conversation loop** – `server.js` listens on `/ws`, ingests caller transcriptions, scores intent, and pushes responses back with `sendText`.
+- **Session memory** – Conversation state stays in memory for quick prototyping; swap for Redis when scaling horizontally.
+- **Lead logging + dashboard** – Outcomes land in `leads.csv`; the static dashboard at `/dashboard` reads it to show captured leads with timestamps.
 
 ---
 
@@ -19,8 +41,7 @@ Vanessa is a proof-of-concept voice acquisitions agent that answers inbound call
    ```bash
    npm install
    ```
-
-2. **Set environment variables** – copy `.env.example` if you have one (or create `.env`) and fill in values:
+2. **Configure environment**
    ```bash
    PORT=8080
    HOST=https://<_your_tunnel_>
@@ -40,43 +61,40 @@ Vanessa is a proof-of-concept voice acquisitions agent that answers inbound call
    ELEVEN_VOICE_ID_MATILDA=TxGEqnHWrfWFTfGW9XjX
    ELEVEN_VOICE_ID_RACHEL=21m00Tcm4TlvDq8ikWAM
    ```
-
 3. **Run the server**
    ```bash
    node server.js
    ```
-   Console logs will show `HTTP on :8080` once Express boots.
-
-4. **Expose the server (optional)** – use Cloudflare Tunnel or ngrok:
+   You’ll see `HTTP on :8080` when Express is ready.
+4. **Expose locally (optional)**
    ```bash
    cloudflared tunnel --url http://localhost:8080
    ```
-   Update your Twilio phone number’s “A Call Comes In” webhook to `https://<your-tunnel>/voice`.
+   Point your Twilio “A Call Comes In” webhook to `https://<your-tunnel>/voice`.
 
 ---
 
-## Testing the Call Flow
+## Test the Call Flow
 
-1. **Warm up** – Hit `https://<tunnel>/voice` in a browser; you should get TwiML `<ConversationRelay .../>`.
-2. **Place a call** – Call your Twilio number from a verified phone. Listen for:
-   - Twilio trial banner (for trial accounts)
-   - Vanessa greeting: “Hi, I’m Vanessa… Are you the owner?”
-   - Stage logs in the console (`stage=ask-intent intent=MaybeYes prompt="Maybe. Sure."`)
-3. **Branch scenarios**
-   - Say “Yes, I’m the owner” → flow proceeds through price, timing, condition, and announces transfer.
-   - Say “No, not interested” → she offers to remove you and exits politely.
-   - Say “Call me later” → she schedules a callback.
-   - Say “I rent here” → immediate polite goodbye.
-   - Stay silent twice → she apologizes and ends the call.
-4. **Dashboard** – Visit `https://<tunnel>/dashboard` to see the CSV-backed lead list.
+- Warm up via `https://<tunnel>/voice` and confirm TwiML `<ConversationRelay .../>` renders.
+- Call your Twilio number and listen for:
+  - Twilio trial banner (if applicable).
+  - Vanessa greeting: “Hi, I’m Vanessa… Are you the owner?”
+  - Stage logs in the console such as `stage=ask-intent intent=MaybeYes prompt="Maybe. Sure."`
+- Explore branches:
+  - Owner → proceeds through price, timing, condition, announces transfer.
+  - Not interested or renter → exits politely and logs the outcome.
+  - Callback request → schedules and confirms before ending.
+  - Silence twice → apologizes and ends the call.
+- Open `https://<tunnel>/dashboard` to confirm the CSV-backed lead list updates.
 
 ---
 
 ## Voice Options
 
-- Default ElevenLabs voice is used when no voice ID is provided.
-- To test a specific voice in real time, append `?voice=bella` (or `matilda`, `rachel`) to `/voice`.
-- `elevenlabsTextNormalization` is enabled by default for better pronunciation. Toggle with `?elevenlabsTextNormalization=off`.
+- Default ElevenLabs voice plays when no ID is provided.
+- Append `?voice=bella`, `?voice=matilda`, `?voice=rachel`, or any configured voice to `/voice` to test alternatives.
+- Toggle ElevenLabs text normalization with `?elevenlabsTextNormalization=off`.
 
 ---
 
@@ -92,16 +110,16 @@ vanessa-voice-poc/
 ├─ test/
 │  └─ prompts.test.js   # Keyword/response unit tests (Node test runner)
 ├─ leads.csv            # Appended call outcomes
-├─ .env                 # Environment variables (not checked in)
+├─ samples/             # Demo call recordings included in this repo
 └─ package.json
 ```
 
 ---
 
-## Notes & Next Steps
+## Next Steps
 
-- **Transfers** – When Vanessa reaches the `transfer` stage, the server updates the call with `/transfer` TwiML, handing off to an acquisitions lead.
-- **Scaling** – Replace the in-memory session map with Redis or another store if you need multi-instance resilience.
-- **Security** – For production, validate Twilio signatures on webhooks and secure the dashboard behind auth.
+- Harden webhooks with Twilio signature validation and add auth around the dashboard.
+- Swap the in-memory session map for Redis or DynamoDB when scaling.
+- Layer in CRM integrations to push hot leads automatically to acquisitions reps.
 
-Enjoy the build — feel free to expand Vanessa’s script or plug in custom ElevenLabs voices by adding env keys like `ELEVEN_VOICE_ID_MYVOICE`.
+Enjoy the build — and if you want to run with Vanessa, I’m always up for a chat about voice-first automations.
