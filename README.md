@@ -2,8 +2,6 @@
 
 Vanessa is a proof-of-concept voice acquisitions agent that answers inbound calls, qualifies sellers, and either transfers hot leads or logs the outcome for follow-up. It pairs **Twilio ConversationRelay** for real-time audio streaming with an **Express** webhook server and a **WebSocket** conversation loop.
 
-> This project became my personal comeback story after a recruiter lifted my work without offering the role. Rather than let the experience go to waste, I turned it into a polished showcase that demonstrates end-to-end voice automation, resilient conversations, and the hustle behind my craft.
-
 ---
 
 ## Demo Audio
